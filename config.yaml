@@ -1,0 +1,39 @@
+# Configuration for Multimodal App Orchestrator
+# Updated for high resilience and premium video stability
+
+routing:
+  text_generation:
+    - provider: "groq"
+      model: "llama-3.3-70b-versatile"
+    - provider: "gemini"
+      model: "models/gemini-1.5-flash"
+    - provider: "openrouter"
+      model: "anthropic/claude-3-haiku"
+
+  image_generation:
+    - provider: "pollinations"
+      model: "flux"
+    - provider: "openrouter"
+      model: "black-forest-labs/flux-1-schnell"
+
+  audio_generation:
+    - provider: "elevenlabs"
+      model: "elevenlabs-v2-pro"
+      timeout: 60
+    - provider: "edge-tts"
+      model: "en-IN-Premium-Energetic"
+      timeout: 30
+
+  video_generation:
+    - provider: "pexels"
+      model: "pexels-cinematic-v1"
+      timeout: 30
+    - provider: "pollinations"
+      model: "pollinations-flux-video"
+      timeout: 60
+
+app_settings:
+  theme: "dark"
+  cache_dir: "./cache"
+  max_history_len: 20
+  log_level: "INFO"

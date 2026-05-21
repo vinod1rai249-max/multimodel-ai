@@ -1,0 +1,14 @@
+# Virtual environments
+.venv/
+
+# Environment secrets
+.env
+.env.*
+
+# Application Cache and Logs
+cache/
+*.log
+
+# Python-generated files
+__pycache__/
+*.py[oc]
