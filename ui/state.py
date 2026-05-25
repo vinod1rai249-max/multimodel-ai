@@ -1,34 +1,36 @@
 import streamlit as st
-from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
-from datetime import datetime
+from typing import List, Dict, Any, Optional
 
-class Message(BaseModel):
+class ChatMessage(BaseModel):
     role: str # "user" or "assistant"
     content: str
     media_path: Optional[str] = None
     media_type: Optional[str] = None # "image", "audio", "video"
+    provider: Optional[str] = None
     model: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.now)
+    trace_id: Optional[str] = None
+    fallback_used: bool = False
+    failed_providers: List[Dict[str, Any]] = Field(default_factory=list)
+    latency: float = 0.0
+    input_type: Optional[str] = None
+    output_type: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 def init_state():
     if "messages" not in st.session_state:
         st.session_state.messages = []
-    
-    if "is_generating" not in st.session_state:
-        st.session_state.is_generating = False
-
     if "current_input_mode" not in st.session_state:
-        st.session_state.current_input_mode = "Text" # Text, Image, Video
+        st.session_state.current_input_mode = "Text"
+    if "target_output" not in st.session_state:
+        st.session_state.target_output = "Text"
 
-def add_message(role: str, content: str, media_path: Optional[str] = None, media_type: Optional[str] = None, model: Optional[str] = None):
-    message = Message(role=role, content=content, media_path=media_path, media_type=media_type, model=model)
-    st.session_state.messages.append(message)
-    # Keep history under limit if needed (from config)
-    # This can be handled here or in the orchestrator
+def add_message(role: str, content: str, **kwargs):
+    msg = ChatMessage(role=role, content=content, **kwargs)
+    st.session_state.messages.append(msg)
 
-def get_messages() -> List[Message]:
-    return st.session_state.messages
+def get_messages() -> List[ChatMessage]:
+    return st.session_state.get("messages", [])
 
 def clear_messages():
     st.session_state.messages = []

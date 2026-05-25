@@ -8,60 +8,63 @@ from typing import List, Dict, Any, Optional
 from providers.base_provider import BaseProvider
 from core.interfaces import GenerationResult
 from core.logger import app_logger
+from core.config_loader import config as app_config
+from core.errors import ProviderNotConfigured, ProviderError, ProviderResponseError
 
 class GoogleTTSProvider(BaseProvider):
     def __init__(self):
         super().__init__("google-cloud-tts")
-        self.api_key = os.getenv("GEMINI_API_KEY")
-        if self.api_key:
-            try:
-                self.client = texttospeech.TextToSpeechAsyncClient(client_options={"api_key": self.api_key})
-            except Exception:
-                self.client = None
-        else:
-            self.client = None
-
+        self._configured = False
+        self.client = None
         # EXCLUSIVE Female Neural2 Voice (Locked)
         self.voice_name = "en-IN-Neural2-A"
+        self._setup()
 
-    async def generate_text(self, prompt: str, history: List[Dict[str, str]] = [], **kwargs) -> GenerationResult:
-        raise NotImplementedError("GoogleTTS only supports audio generation.")
+    def _setup(self):
+        # Prefer GOOGLE_APPLICATION_CREDENTIALS if set, otherwise try GEMINI_API_KEY
+        creds = app_config.api_keys.get("GOOGLE_APPLICATION_CREDENTIALS")
+        api_key = app_config.api_keys.get("GEMINI_API_KEY")
+        
+        try:
+            if creds:
+                self.client = texttospeech.TextToSpeechAsyncClient()
+                self._configured = True
+            elif api_key:
+                self.client = texttospeech.TextToSpeechAsyncClient(client_options={"api_key": api_key})
+                self._configured = True
+        except Exception as e:
+            app_logger.error(f"Failed to initialize Google TTS: {e}")
+            self._configured = False
 
-    async def generate_image(self, prompt: str, **kwargs) -> GenerationResult:
-        raise NotImplementedError("GoogleTTS only supports audio generation.")
+    def is_configured(self) -> bool:
+        return self._configured
 
     async def generate_audio(self, prompt: str, **kwargs) -> GenerationResult:
-        if not self.client:
-            raise ValueError("Google Cloud TTS client not initialized. Ensure GEMINI_API_KEY is valid.")
+        if not self.is_configured():
+            raise ProviderNotConfigured("Google Cloud TTS not configured")
 
-        # ABSOLUTE LOCK: Using the energetic female voice
-        voice_name = self.voice_name
+        trace_id = kwargs.get("trace_id")
+        voice_name = kwargs.get("voice_name", self.voice_name)
         
-        # Audio Configuration for "Premium, energetic, crisp and clear"
         input_text = texttospeech.SynthesisInput(text=prompt)
-        
         voice_selection = texttospeech.VoiceSelectionParams(
             language_code="en-IN",
             name=voice_name
         )
-        
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3,
-            speaking_rate=0.95, # Energetic pace
-            pitch=1.2 # Youthful boost
+            speaking_rate=0.95,
+            pitch=1.2
         )
 
         try:
-            app_logger.info(f"Generating EXCLUSIVE premium female audio ({voice_name})...")
+            app_logger.bind(trace_id=trace_id).info(f"Generating Google TTS audio ({voice_name})...")
             response = await self.client.synthesize_speech(
                 input=input_text, 
                 voice=voice_selection, 
                 audio_config=audio_config
             )
-            return self.create_result(response.audio_content, "audio", voice_name)
+            return self.create_result(response.audio_content, "audio", voice_name, trace_id=trace_id)
         except Exception as e:
-            self.log_error("generate_audio", e)
-            raise e
-
-    async def generate_video(self, prompt: str, **kwargs) -> GenerationResult:
-        raise NotImplementedError("GoogleTTS only supports audio generation.")
+            self.log_error("generate_audio", e, trace_id=trace_id)
+            raise ProviderError(f"Google TTS failed: {str(e)}") from e

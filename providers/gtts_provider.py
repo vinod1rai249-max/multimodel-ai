@@ -5,25 +5,20 @@ from typing import List, Dict, Any, Optional
 from providers.base_provider import BaseProvider
 from core.interfaces import GenerationResult
 from core.logger import app_logger
+from core.errors import ProviderError, ProviderResponseError
 
 class GTTSProvider(BaseProvider):
     def __init__(self):
         super().__init__("google-translate-tts")
 
-    async def generate_text(self, prompt: str, history: List[Dict[str, str]] = [], **kwargs) -> GenerationResult:
-        raise NotImplementedError("gTTS only supports audio generation.")
-
-    async def generate_image(self, prompt: str, **kwargs) -> GenerationResult:
-        raise NotImplementedError("gTTS only supports audio generation.")
+    def is_configured(self) -> bool:
+        return True # Publicly available
 
     async def generate_audio(self, prompt: str, **kwargs) -> GenerationResult:
-        gender = kwargs.get("voice_gender", "Female")
+        trace_id = kwargs.get("trace_id")
         
-        # gTTS doesn't explicitly support gender, but the India locale 
-        # has a very distinct young/dynamic professional North Indian tone.
-        # We'll use 'en' with the 'co.in' tld for the authentic accent.
         try:
-            app_logger.info(f"Generating free Google Assistant audio (India)...")
+            app_logger.bind(trace_id=trace_id).info(f"Generating gTTS audio (India)...")
             
             # Using tld='co.in' for the North Indian English accent
             tts = await asyncio.to_thread(gTTS, text=prompt, lang='en', tld='co.in', slow=False)
@@ -33,10 +28,10 @@ class GTTSProvider(BaseProvider):
             await asyncio.to_thread(tts.write_to_fp, fp)
             audio_bytes = fp.getvalue()
             
-            return self.create_result(audio_bytes, "audio", "google-assistant-in")
+            if not audio_bytes:
+                raise ProviderResponseError("gTTS returned empty audio")
+                
+            return self.create_result(audio_bytes, "audio", "google-assistant-in", trace_id=trace_id)
         except Exception as e:
-            self.log_error("generate_audio", e)
-            raise e
-
-    async def generate_video(self, prompt: str, **kwargs) -> GenerationResult:
-        raise NotImplementedError("gTTS only supports audio generation.")
+            self.log_error("generate_audio", e, trace_id=trace_id)
+            raise ProviderError(f"gTTS failed: {str(e)}") from e

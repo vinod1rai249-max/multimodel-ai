@@ -3,6 +3,8 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from providers.base_provider import BaseProvider
 from core.interfaces import GenerationResult
+from core.logger import app_logger
+from core.errors import ProviderError, ProviderResponseError
 
 class EdgeTTSProvider(BaseProvider):
     def __init__(self):
@@ -10,24 +12,20 @@ class EdgeTTSProvider(BaseProvider):
         # EXCLUSIVE Female English-Indian Voice (Locked for North Indian Tone)
         self.voice = "en-IN-NeerjaNeural"
 
-    async def generate_text(self, prompt: str, history: List[Dict[str, str]] = [], **kwargs) -> GenerationResult:
-        raise NotImplementedError("Edge-TTS only supports audio generation.")
-
-    async def generate_image(self, prompt: str, **kwargs) -> GenerationResult:
-        raise NotImplementedError("Edge-TTS only supports audio generation.")
+    def is_configured(self) -> bool:
+        return True # Publicly available
 
     async def generate_audio(self, prompt: str, **kwargs) -> GenerationResult:
-        # ABSOLUTE LOCK: This provider now only speaks in the high-energy female voice
-        voice = self.voice
-
+        trace_id = kwargs.get("trace_id")
+        voice = kwargs.get("voice", self.voice)
+        
         # MAXIMUM ENERGY TUNING: Strong, Confident, Dynamic
-        rate = "+12%"
-        volume = "+30%" # Even more projection as requested
-        pitch = "+0Hz"
+        rate = kwargs.get("rate", "+12%")
+        volume = kwargs.get("volume", "+30%")
+        pitch = kwargs.get("pitch", "+0Hz")
 
         try:
-            from core.logger import app_logger
-            app_logger.info(f"Generating EXCLUSIVE FEMALE audio (Voice: {voice})...")
+            app_logger.bind(trace_id=trace_id).info(f"Generating Edge-TTS audio (Voice: {voice})...")
             communicate = edge_tts.Communicate(prompt, voice, rate=rate, pitch=pitch, volume=volume)
 
             audio_bytes = b""
@@ -35,10 +33,10 @@ class EdgeTTSProvider(BaseProvider):
                 if chunk["type"] == "audio":
                     audio_bytes += chunk["data"]
             
-            return self.create_result(audio_bytes, "audio", voice)
+            if not audio_bytes:
+                raise ProviderResponseError("Edge-TTS returned empty audio")
+                
+            return self.create_result(audio_bytes, "audio", voice, trace_id=trace_id)
         except Exception as e:
-            self.log_error("generate_audio", e)
-            raise e
-
-    async def generate_video(self, prompt: str, **kwargs) -> GenerationResult:
-        raise NotImplementedError("Edge-TTS only supports audio generation.")
+            self.log_error("generate_audio", e, trace_id=trace_id)
+            raise ProviderError(f"Edge-TTS failed: {str(e)}") from e

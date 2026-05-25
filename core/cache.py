@@ -15,7 +15,7 @@ class MediaCache:
         unique_str = f"{prompt}_{provider}_{model}_{content_type}_{str(metadata)}"
         return hashlib.md5(unique_str.encode()).hexdigest()
 
-    async def save_media(self, prompt: str, provider: str, content_type: str, data: bytes, extension: str, model: str = "", metadata: dict = {}) -> str:
+    async def save_media(self, prompt: str, provider: str, content_type: str, data: bytes, extension: str, model: str = "", metadata: dict = {}, trace_id: str = None) -> str:
         key = self._generate_key(prompt, provider, content_type, model, metadata)
         file_name = f"{key}.{extension}"
         file_path = os.path.join(self.cache_dir, file_name)
@@ -23,7 +23,7 @@ class MediaCache:
         async with aiofiles.open(file_path, "wb") as f:
             await f.write(data)
         
-        app_logger.debug(f"Saved {content_type} to cache: {file_path}")
+        app_logger.bind(trace_id=trace_id).debug(f"Saved {content_type} to cache: {file_path}")
         return file_path
 
     def get_media_path(self, prompt: str, provider: str, content_type: str, extension: str, model: str = "", metadata: dict = {}) -> str:
